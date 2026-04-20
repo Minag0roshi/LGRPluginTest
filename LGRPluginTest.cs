@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -21,12 +21,14 @@ namespace LGRPluginTest
 
     #region Data Passed From UI to Plugin
 
-    // the "height" is the AttributeName of the TextBox for example
+    // the "LengthFactor" is the AttributeName of the TextBox for example
 
     public class StructuresData
     {
-        [TSP.StructuresField("height")]
-        public double height;
+        [StructuresField("LengthFactor")]
+        public double LengthFactor;
+        [StructuresField("Profile")]
+        public string Profile;
     }
 
     #endregion
@@ -38,7 +40,7 @@ namespace LGRPluginTest
     // then the UI for the plugin
     // after that for translation purposes
     [TSP.Plugin("LGRPluginTest")]
-    [TSP.PluginUserInterface("LGRPluginTest.UserControl1")]
+    [TSP.PluginUserInterface("LGRPluginTest.MainForm")]
     [TSP.PluginDescription("enu", "LGRPluginTest")]
     [TSP.PluginCoordinateSystem(PluginBase.CoordinateSystemType.FROM_FIRST_AND_SECOND_POINT)]
     //This one would be where the insertion point of the plugin changed, the plugin would re-run
@@ -61,7 +63,11 @@ namespace LGRPluginTest
         // Enables inserting of objects in a model.
         private readonly TSM.Model _model;
         // Enables retrieving of input values.
-        private readonly StructuresData _data;
+        private StructuresData Data { get; set; }
+
+        private double _LengthFactor;
+        private string _Profile;
+
 
         // private int NumberOfBeams = 5;
 
@@ -81,7 +87,7 @@ namespace LGRPluginTest
             _model = new TSM.Model();
 
             // Link to input values.
-            _data = data;
+            Data = data;
         }
 
         #endregion
@@ -94,17 +100,18 @@ namespace LGRPluginTest
         // <returns>List of input definitions</returns>
         public override List<InputDefinition> DefineInput()
         {
-            // Define input objects.
-
-            TSMUI.Picker PointPicker = new TSMUI.Picker();
-
+            Picker BeamPicker = new Picker();
             List<InputDefinition> PointList = new List<InputDefinition>();
 
-            T3D.Point InputPoint = PointPicker.PickPoint();
+            T3D.Point Point1 = BeamPicker.PickPoint();
+            T3D.Point Point2 = BeamPicker.PickPoint();
 
-            InputDefinition InputDef = new InputDefinition(InputPoint);
+            InputDefinition Input1 = new InputDefinition(Point1);
+            InputDefinition Input2 = new InputDefinition(Point2);
 
-            PointList.Add(InputDef);
+            //Add inputs to InputDefinition list.
+            PointList.Add(Input1);
+            PointList.Add(Input2);
 
             return PointList;
         }
@@ -113,15 +120,62 @@ namespace LGRPluginTest
         #endregion
 
 
-        #region Run Method that executes the code
+
+
+
+        #region Create Beam
+
+        // DON'T CALL COMMIT CHANGES. PLUGINS HANDLE THIS INTERNALLY
+        // Model.CommitChanges();
+
+        private void CreateBeam(T3D.Point Point1, T3D.Point Point2)
+        {
+            TSM.Beam MyBeam = new TSM.Beam(Point1, Point2);
+
+            MyBeam.Profile.ProfileString =  _Profile;
+            MyBeam.Finish = "HDG";
+
+            // With this we help internal code to assign same ID to beam when plugin is modified.
+            // To avoid some problems related to links with UDA values or booleans (cuts, fittings) for example.
+            MyBeam.SetLabel("MyBeam01");
+
+            MyBeam.Insert();
+        }
+
+        #endregion
+
+
+
+        #region Get Values from dialog (example) --> GetValuesFromDialog()
+
+        private void GetValuesFromDialog()
+        {
+            _LengthFactor = Data.LengthFactor;
+            _Profile = Data.Profile;
+
+            if (IsDefaultValue(_LengthFactor))
+            {
+                _LengthFactor = 2.0;
+            }
+            if (IsDefaultValue(_Profile))
+            {
+                _Profile = "HEA300";
+            }
+        }
+
+
+        #endregion
+
+
+
+        #region Run Method that executes the code. Main method of the plug-in.
 
         // This function is called upon execution of the plugin.
         // <param name="input">List of input definitions</param>
         // <returns></returns>
-        public override bool Run(List<InputDefinition> input)
+        public override bool Run(List<InputDefinition> Input)
         {
-            try
-            {
+
                 // Write your code here.
 
                 // Gets values from the StructuresData class and sets them to the fields in the plugin
@@ -129,18 +183,7 @@ namespace LGRPluginTest
 
                 // For example: GetValuesFromDialog();
 
-                double Height = _data.height;
-
-                // Get picked point in Tekla Structures
-                T3D.Point StartPoint = (T3D.Point)input[0].GetInput();
-
-                // Calculate the end point of the beam
-                T3D.Point EndPoint = new T3D.Point(StartPoint);
-                EndPoint.Z += Height;
-
                 // Change the workplane further, or do something with the pickpoints if needed
-
-                // double PickedPointDistance = T3D.Distance.PointToPoint(StartPoint, EndPoint);
 
 
                 // Your Execution Code Goes Here!
@@ -148,16 +191,32 @@ namespace LGRPluginTest
                 // A good practice is to have the class in a separate .cs to be reused on other plugin or app. Below is not the ideal...
                 // CreateBuilding(PickedPointDistance);
 
-                // Create a beam instance
-                TSM.Beam Column = new TSM.Beam(StartPoint, EndPoint);
-                Column.Profile.ProfileString = "HEA400";
 
-                // Insert the beam in the model
-                Column.Insert();
-            }
-            catch (Exception e)
+            try
             {
-                MessageBox.Show(e.ToString());
+                GetValuesFromDialog();
+
+                T3D.Point Point1 = (T3D.Point)(Input[0]).GetInput();
+                T3D.Point Point2 = (T3D.Point)(Input[1]).GetInput();
+
+                T3D.Point LengthVector = new T3D.Point(
+                    Point2.X - Point1.X,
+                    Point2.Y - Point1.Y,
+                    Point2.Z - Point1.Z
+                );
+
+                if (_LengthFactor > 0)
+                {
+                    Point2.X = _LengthFactor * LengthVector.X + Point1.X;
+                    Point2.Y = _LengthFactor * LengthVector.Y + Point1.Y;
+                    Point2.Z = _LengthFactor * LengthVector.Z + Point1.Z;
+                }
+
+                CreateBeam(Point1, Point2);
+            }
+            catch (Exception Ex)
+            {
+                Console.WriteLine("Exception: " + Ex.ToString());
             }
 
             return true;
@@ -166,80 +225,6 @@ namespace LGRPluginTest
 
         #endregion
 
-
-        #region Get Values from dialog (example) --> GetValuesFromDialog()
-
-        //private void GetValuesFromDialog()
-        //{
-        //    if (true)
-        //    {
-
-        //    }
-        //    else
-        //    {
-
-        //    }
-        //}
-
-
-        #endregion
-
-
-        #region Reads the Project Data from Data File in MBS Job or Tekla Model folder
-
-        //private void FetchProjectData()
-        //{
-
-        //}
-
-
-        #endregion
-
-
-        #region Create The Building
-
-
-        //public void CreateBuilding(double PickedPointDistance)
-        //{
-        // Get number, spacing, and profile size of Purlin data from Data file
-        //FetchProjectData();
-
-
-
-        // DON'T CALL COMMIT CHANGES. PLUGINS HANDLE THIS INTERNALLY
-        //Model.CommitChanges();
-
-        //}
-
-        #endregion
-
-
-        #region Create Purlin
-
-        //public Beam CreatePurlin(Point StartPoint, Point EndPoint, string ProfileSize, string MBSMarkNumber)
-        //{
-        //    Beam Purlin = new Beam();
-        //    Purlin.StartPoint = StartPoint;
-        //    Purlin.StartPointOffset.Dx = 0;
-        //    // Tekla develore said Label is meant to be unique
-        //    // However, this isn't documented in the API Reference online
-
-        //    //Purlin.SetLabel("ROOF-" + MBSMarkNumber);
-        //    //if (Purlin.Insert())
-        //    //{
-
-        //    //    // I have seen issues with UDAs being set vs. not set on other objects in plugins
-        //    //    // and whether Tekla assigned an existing ID toa different part during a modify
-        //    //    // UDAs set from the initial insertion / previos modify, that aren't set to a new object
-        //    //    // can carry incorrect residual UDA values over to another object.
-
-        //    //    Purlin.SetUserProperty("MbsPurpose", "ROOF");
-        //    //}
-        //    //return Purlin;
-
-        //}
-
-        #endregion
 
     }
 
