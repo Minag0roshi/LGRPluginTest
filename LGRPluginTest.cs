@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -100,7 +100,7 @@ namespace LGRPluginTest
         // <returns>List of input definitions</returns>
         public override List<InputDefinition> DefineInput()
         {
-            Picker BeamPicker = new Picker();
+            TSMUI.Picker BeamPicker = new TSMUI.Picker();
             List<InputDefinition> PointList = new List<InputDefinition>();
 
             T3D.Point Point1 = BeamPicker.PickPoint();
@@ -134,6 +134,7 @@ namespace LGRPluginTest
 
             MyBeam.Profile.ProfileString =  _Profile;
             MyBeam.Finish = "HDG";
+     
 
             // With this we help internal code to assign same ID to beam when plugin is modified.
             // To avoid some problems related to links with UDA values or booleans (cuts, fittings) for example.
